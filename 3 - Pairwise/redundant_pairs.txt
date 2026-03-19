@@ -1,0 +1,5 @@
+Redundant Pairs (r > 0.80):
+ -> Cluster 3 & Cluster 2: r = 0.85
+ -> Cluster 4 & Cluster 3: r = 0.88
+ -> Cluster 5 & Cluster 2: r = 0.87
+ -> Cluster 5 & Cluster 3: r = 0.90

@@ -1,0 +1,19 @@
+
+File: 200_2024.parquet
+Total Rows: 3,228,002
+Unique Days: 362
+Total Homes Analysed: 4761
+
+FEEDERS:
+Full Year Feeders (>17k rows): 57
+Partial Feeders: 143
+
+DATA:
+Theoretical Max Rows: 3,485,000
+Actual Rows: 3,228,002
+Missing: 256,998
+% Complete: 92.63%
+
+OUTAGES:
+Timestamps with <10 active feeders: 0
+
