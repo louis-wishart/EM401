@@ -6,8 +6,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 TARGET_CONTEXT = "SUMMER WD"
-TRANSFORMER_LIMIT_KW = 8.075 
-
+TRANSFORMER_LIMIT_KW = 8075  
 
 with open("coefficients.json", 'r') as f:
     coeffs = json.load(f)[TARGET_CONTEXT]
@@ -16,19 +15,17 @@ A_BASE, B_BASE, C_BASE = coeffs["A"], coeffs["B"], coeffs["C"]
 raw_data = np.load("centroids_k2.npy")
 centroids = raw_data.T if raw_data.shape == (48, 2) else raw_data
 
-# Ensure Predator is the higher peak (converted to kW)
 if np.max(centroids[1]) > np.max(centroids[0]):
-    prey_centroid, predator_centroid = centroids[0]/1000.0, centroids[1]/1000.0
+    prey_centroid, predator_centroid = centroids[0], centroids[1]
 else:
-    prey_centroid, predator_centroid = centroids[1]/1000.0, centroids[0]/1000.0
+    prey_centroid, predator_centroid = centroids[1], centroids[0]
 
 def exact_peak_kw(y_star):
     x_star = 1.0 - y_star
     blended_profile = (x_star * prey_centroid) + (y_star * predator_centroid)
     return np.max(blended_profile)
 
-# Bifurctaion Sweep
-
+# Bifurcation Sweep
 mu_values = np.linspace(1.0, 1.50, 3000)
 
 def run_sweep(stress_target):
@@ -36,7 +33,6 @@ def run_sweep(stress_target):
     bifurcation_mu, bifurcation_kw = None, None
     
     for mu in mu_values:
-        # Apply stress to A or shrink C 
         A_current = A_BASE * mu if stress_target == 'A' else A_BASE
         C_current = C_BASE / mu if stress_target == 'C' else C_BASE
         
@@ -82,36 +78,33 @@ def create_bifurcation_plot(stable_history, unstable_history, b_mu, b_kw, title,
     ax.plot(mu_values, unstable_history, color=COLOR_UNSTABLE, linewidth=2.5, linestyle='--', label='Unstable Saddle')
     ax.fill_between(mu_values, stable_history, unstable_history, color=COLOR_FILL, alpha=0.6, label='Operational Margin')
     
-    # Hardware Limit Line
     ax.axhline(TRANSFORMER_LIMIT_KW, color='black', linestyle='-.', linewidth=2.5, label=f'Hardware Limit ({TRANSFORMER_LIMIT_KW} kW)')
 
-    # Dynamic X-Axis limit calculation
     x_max_limit = b_mu + 0.05 if b_mu else max(mu_values)
 
     if b_mu:
         ax.scatter([b_mu], [b_kw], color=COLOR_UNSTABLE, s=120, zorder=5, edgecolor='white', linewidth=1.5)
         ax.axhline(b_kw, color='black', linestyle=':', alpha=0.3, linewidth=1.5)
         
-
         ax.axvspan(b_mu, x_max_limit, color='#FAECEF', alpha=0.7)
       
         text_x_pos = b_mu + ((x_max_limit - b_mu) / 2)
         ax.text(text_x_pos, b_kw, 'Topological\nCollapse', 
                 ha='center', va='center', color='#8A1C36', fontweight='bold', alpha=0.9, fontsize=12)
         
-        ax.annotate(f'Bifurcation Point\n({b_kw:.2f} kW / hh)', 
+        ax.annotate(f'Bifurcation Point\n({b_kw:.0f} kW)', 
                      xy=(b_mu, b_kw), 
-                     xytext=(b_mu - 0.02, b_kw + 0.25),
+                     xytext=(b_mu - 0.02, b_kw + 300),
                      arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=6, headlength=8, edgecolor='none'),
                      ha='right', va='bottom', fontweight='bold', color='black', fontsize=11)
 
     ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
     ax.set_xlabel(r"Stress Parameter ($\mu$)", fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_ylabel("Coincident Peak Demand (kW / Household)", fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_ylabel("Total Feeder Demand (kW)", fontsize=12, fontweight='bold', labelpad=10)
 
     def pct_formatter(x, pos): return "Baseline" if x == 1.0 else f"+{(x-1.0)*100:.1f}%"
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(pct_formatter))
-    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f kW'))
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%d kW'))
 
     ax.grid(True, linestyle=':', alpha=0.7, color='black')
     ax.spines['top'].set_visible(False)
@@ -126,7 +119,7 @@ def create_bifurcation_plot(stable_history, unstable_history, b_mu, b_kw, title,
     padding = (max_kw - min_kw) * 0.25
     
     ax.set_xlim(1.0, x_max_limit)
-    ax.set_ylim(min_kw - padding, max(max_kw + padding, TRANSFORMER_LIMIT_KW + 0.5))
+    ax.set_ylim(min_kw - padding, max(max_kw + padding, TRANSFORMER_LIMIT_KW + 500))
 
     plt.tight_layout()
     plt.savefig(filename, dpi=300, bbox_inches='tight')
