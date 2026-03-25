@@ -7,6 +7,23 @@
 * Further breakdown of more complex scripts can be found in 'Code Walkthrough' folder
 * 'Alternate Datasets' contains work carried out on GoiEner and Slovak Datasets
 
+# Required Libraries 
+* pandas
+* geopandas
+* matplotlib
+* random
+* s3fs
+* pyarrow
+* contextily
+* fsspec
+* boto3
+* numpy
+* scipy
+* seaborn
+* re
+* pysindy
+* json
+
 # Workflow
 
 ## 2024 Preprocessing 
