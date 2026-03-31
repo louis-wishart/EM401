@@ -8,12 +8,22 @@ warnings.filterwarnings("ignore")
 TARGET_CONTEXT = "SUMMER WD"
 TRANSFORMER_LIMIT_KW = 8075  
 
+# Conversion: raw centroids are Wh per 30-min interval, per feeder
+# Multiply by 2 to hourly (Wh -> W), divide by 1000 (W -> kW),
+# scale across all 200 feeders 
+N_FEEDERS = 200
+WH_TO_KW = 2 / 1000
+SYSTEM_SCALE = N_FEEDERS * WH_TO_KW   # = 0.4
+
 with open("coefficients.json", 'r') as f:
     coeffs = json.load(f)[TARGET_CONTEXT]
 A_BASE, B_BASE, C_BASE = coeffs["A"], coeffs["B"], coeffs["C"]
 
 raw_data = np.load("centroids_k2.npy")
 centroids = raw_data.T if raw_data.shape == (48, 2) else raw_data
+
+# Apply unit conversion - Wh per feeder -> kW across full virtual network
+centroids = centroids * SYSTEM_SCALE
 
 if np.max(centroids[1]) > np.max(centroids[0]):
     prey_centroid, predator_centroid = centroids[0], centroids[1]
@@ -72,56 +82,81 @@ COLOR_FILL = '#E0E7FA'
 
 def create_bifurcation_plot(stable_history, unstable_history, b_mu, b_kw, title, filename):
     plt.rcParams.update({'font.size': 11, 'font.family': 'sans-serif'})
-    fig, ax = plt.subplots(figsize=(10, 6.5))
-
-    ax.plot(mu_values, stable_history, color=COLOR_STABLE, linewidth=3.5, label='Stable Attractor')
-    ax.plot(mu_values, unstable_history, color=COLOR_UNSTABLE, linewidth=2.5, linestyle='--', label='Unstable Saddle')
-    ax.fill_between(mu_values, stable_history, unstable_history, color=COLOR_FILL, alpha=0.6, label='Operational Margin')
     
-    ax.axhline(TRANSFORMER_LIMIT_KW, color='black', linestyle='-.', linewidth=2.5, label=f'Hardware Limit ({TRANSFORMER_LIMIT_KW} kW)')
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, 
+        sharex=True, 
+        figsize=(10, 6.5), 
+        gridspec_kw={'height_ratios': [1, 4]}
+    )
+    fig.subplots_adjust(hspace=0.08)
 
     x_max_limit = b_mu + 0.05 if b_mu else max(mu_values)
 
+    for ax in (ax_top, ax_bot):
+        ax.plot(mu_values, stable_history, color=COLOR_STABLE, linewidth=3.5, label='Stable Attractor')
+        ax.plot(mu_values, unstable_history, color=COLOR_UNSTABLE, linewidth=2.5, linestyle='--', label='Unstable Saddle')
+        ax.fill_between(mu_values, stable_history, unstable_history, color=COLOR_FILL, alpha=0.6, label='Operational Margin')
+        ax.axhline(TRANSFORMER_LIMIT_KW, color='black', linestyle='-.', linewidth=2.5, label=f'Hardware Limit ({TRANSFORMER_LIMIT_KW} kW)')
+
+        if b_mu:
+            ax.axvspan(b_mu, x_max_limit, color='#FAECEF', alpha=0.7)
+            ax.scatter([b_mu], [b_kw], color=COLOR_UNSTABLE, s=120, zorder=5, edgecolor='white', linewidth=1.5)
+            ax.axhline(b_kw, color='black', linestyle=':', alpha=0.3, linewidth=1.5)
+
     if b_mu:
-        ax.scatter([b_mu], [b_kw], color=COLOR_UNSTABLE, s=120, zorder=5, edgecolor='white', linewidth=1.5)
-        ax.axhline(b_kw, color='black', linestyle=':', alpha=0.3, linewidth=1.5)
-        
-        ax.axvspan(b_mu, x_max_limit, color='#FAECEF', alpha=0.7)
-      
         text_x_pos = b_mu + ((x_max_limit - b_mu) / 2)
-        ax.text(text_x_pos, b_kw, 'Topological\nCollapse', 
+        ax_bot.text(text_x_pos, b_kw, 'Topological\nCollapse', 
                 ha='center', va='center', color='#8A1C36', fontweight='bold', alpha=0.9, fontsize=12)
         
-        ax.annotate(f'Bifurcation Point\n({b_kw:.0f} kW)', 
+        ax_bot.annotate(f'Bifurcation Point\n({b_kw:.0f} kW)', 
                      xy=(b_mu, b_kw), 
-                     xytext=(b_mu - 0.02, b_kw + 300),
+                     xytext=(b_mu - 0.02, b_kw + 150),
                      arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=6, headlength=8, edgecolor='none'),
                      ha='right', va='bottom', fontweight='bold', color='black', fontsize=11)
 
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
-    ax.set_xlabel(r"Stress Parameter ($\mu$)", fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_ylabel("Total Feeder Demand (kW)", fontsize=12, fontweight='bold', labelpad=10)
+    ax_top.set_title(title, fontsize=14, fontweight='bold', pad=15)
+    ax_bot.set_xlabel(r"Stress Parameter ($\mu$)", fontsize=12, fontweight='bold', labelpad=10)
+    fig.text(0.02, 0.5, 'Total Feeder Demand (kW)', va='center', rotation='vertical', fontsize=12, fontweight='bold')
 
     def pct_formatter(x, pos): return "Baseline" if x == 1.0 else f"+{(x-1.0)*100:.1f}%"
-    ax.xaxis.set_major_formatter(ticker.FuncFormatter(pct_formatter))
-    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%d kW'))
+    ax_bot.xaxis.set_major_formatter(ticker.FuncFormatter(pct_formatter))
+    ax_bot.yaxis.set_major_formatter(ticker.FormatStrFormatter('%d kW'))
+    ax_top.yaxis.set_major_formatter(ticker.FormatStrFormatter('%d kW'))
 
-    ax.grid(True, linestyle=':', alpha=0.7, color='black')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_linewidth(1.2)
-    ax.spines['bottom'].set_linewidth(1.2)
-    
-    ax.legend(loc='upper left', framealpha=0.95, fontsize=10)
+    for ax in (ax_top, ax_bot):
+        ax.grid(True, linestyle=':', alpha=0.7, color='black')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_linewidth(1.2)
+
+    ax_top.spines['bottom'].set_visible(False)
+    ax_bot.spines['top'].set_visible(False)
+    ax_bot.spines['bottom'].set_linewidth(1.2)
+
+    handles, labels = ax_bot.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax_top.legend(by_label.values(), by_label.keys(), loc='upper left', framealpha=0.95, fontsize=10)
 
     min_kw = np.nanmin(stable_history)
-    max_kw = np.nanmax(unstable_history)
-    padding = (max_kw - min_kw) * 0.25
     
-    ax.set_xlim(1.0, x_max_limit)
-    ax.set_ylim(min_kw - padding, max(max_kw + padding, TRANSFORMER_LIMIT_KW + 500))
+    ax_bot.set_xlim(1.0, x_max_limit)
+    ax_top.set_xlim(1.0, x_max_limit)
+    
+    # Exact specified split boundaries
+    ax_bot.set_ylim(min_kw - 100, 3000)
+    ax_top.set_ylim(8000, TRANSFORMER_LIMIT_KW + 150)
 
-    plt.tight_layout()
+    ax_top.tick_params(labelbottom=False, bottom=False)
+    ax_bot.xaxis.tick_bottom()
+
+    d = .015  
+    kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False, linewidth=1.5)
+    ax_top.plot((-d, +d), (-d*4, +d*4), **kwargs)        
+    kwargs.update(transform=ax_bot.transAxes)  
+    ax_bot.plot((-d, +d), (1 - d, 1 + d), **kwargs) 
+
+    plt.tight_layout(rect=[0.04, 0, 1, 1])
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     print(f"Saved: {filename}")
     plt.close(fig)
